@@ -368,7 +368,60 @@ Recommended environment:
 - x64
 - WDK / KMDF if you want to build [kexample](kexample)
 
-Open [cpueaxh.sln](cpueaxh.sln) and build the solution.
+### Visual Studio
+
+Open [cpueaxh.sln](cpueaxh.sln) and build the solution with `Debug|x64` or `Release|x64`.
+
+### Command line
+
+Use a Visual Studio 2022 Developer PowerShell or Developer Command Prompt so that `msbuild`, the MSVC toolchain, and MASM are available in `PATH`.
+
+Build the full solution:
+
+```powershell
+msbuild cpueaxh.sln /p:Configuration=Debug /p:Platform=x64
+```
+
+Build the user-mode library and example only:
+
+```powershell
+msbuild cpueaxh\cpueaxh.vcxproj /p:Configuration=Debug /p:Platform=x64
+msbuild example\example.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+Build the test executable:
+
+```powershell
+msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+Build the kernel sample:
+
+```powershell
+msbuild kexample\kexample.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+Notes:
+- Building the full solution also builds the kernel-mode projects. If WDK / KMDF is not installed, build the user-mode projects individually instead of `cpueaxh.sln`.
+- The user-mode projects `cpueaxh`, `example`, and `test` only require the normal Visual Studio C++ toolchain.
+- The kernel-mode projects `kcpueaxh` and `kexample` require WDK / KMDF.
+- `x64` is the recommended target. Some `Win32` configurations still use the older `v142` toolset.
+
+If you are using newer Build Tools and do not have `v143` installed, override the user-mode platform toolset on the command line with a toolset name that actually appears under your installed `PlatformToolsets` directory. For example, some newer VS Build Tools installations expose `v145` as the available MSVC x64 platform toolset name:
+
+```powershell
+msbuild cpueaxh\cpueaxh.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+msbuild example\example.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+```
+
+You can inspect the available x64 MSVC platform toolset names with:
+
+```powershell
+Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets' -Directory
+```
+
+The default project settings remain `v143` for `x64` user-mode builds and `WindowsKernelModeDriver10.0` for kernel-mode builds.
 
 ## License
 

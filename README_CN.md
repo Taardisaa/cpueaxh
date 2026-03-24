@@ -368,7 +368,60 @@ if (cpueaxh_mem_regions(engine, &regions, &count) == CPUEAXH_ERR_OK) {
 - x64
 - 如果需要构建 [kexample](kexample)，还需要安装 WDK / KMDF
 
-打开 [cpueaxh.sln](cpueaxh.sln) 并构建解决方案。
+### Visual Studio
+
+打开 [cpueaxh.sln](cpueaxh.sln)，使用 `Debug|x64` 或 `Release|x64` 构建即可。
+
+### 命令行
+
+请在 Visual Studio 2022/2026 Developer PowerShell 或 Developer Command Prompt 中执行，这样 `msbuild`、MSVC 工具链和 MASM 才会自动加入 `PATH`。
+
+构建整个解决方案：
+
+```powershell
+msbuild cpueaxh.sln /p:Configuration=Debug /p:Platform=x64
+```
+
+只构建用户态库和示例：
+
+```powershell
+msbuild cpueaxh\cpueaxh.vcxproj /p:Configuration=Debug /p:Platform=x64
+msbuild example\example.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+构建测试程序：
+
+```powershell
+msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+构建内核示例：
+
+```powershell
+msbuild kexample\kexample.vcxproj /p:Configuration=Debug /p:Platform=x64
+```
+
+说明：
+- 构建整个解决方案时也会一并构建内核态项目；如果没有安装 WDK / KMDF，请不要直接构建 `cpueaxh.sln`，而是分别构建用户态项目。
+- `cpueaxh`、`example` 和 `test` 这些用户态项目只需要常规的 Visual Studio C++ 工具链。
+- `kcpueaxh` 和 `kexample` 这些内核态项目需要安装 WDK / KMDF。
+- 推荐优先使用 `x64`。部分 `Win32` 配置仍然使用较旧的 `v142` 工具集。
+
+如果你使用的是较新的 Build Tools，而本机没有安装 `v143`，可以在命令行里覆盖用户态项目的工具集，但要传入真正出现在 `PlatformToolsets` 目录里的工具集名字。比如某些较新的 VS Build Tools 环境会把可用的 MSVC x64 工具集名字暴露为 `v145`：
+
+```powershell
+msbuild cpueaxh\cpueaxh.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+msbuild example\example.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64PlatformToolset=v145
+```
+
+可以用下面的命令查看本机实际可用的 x64 MSVC 工具集名字：
+
+```powershell
+Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets' -Directory
+```
+
+项目默认配置仍然保持为：`x64` 用户态使用 `v143`，内核态使用 `WindowsKernelModeDriver10.0`。
 
 ## 开源协议
 
