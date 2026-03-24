@@ -35,6 +35,7 @@ CodeHookCallback = Callable[[int], None]
 MemoryHookCallback = Callable[[int, int, int, int], None]
 InvalidMemoryHookCallback = Callable[[int, int, int, int], int | bool]
 EscapeCallback = Callable[[CpueaxhX86Context], int | None]
+HostBridge = object
 
 
 class Engine:
@@ -170,6 +171,10 @@ class Engine:
 
     def stop(self) -> None:
         self._api.cpueaxh_emu_stop(self._engine)
+
+    def host_call(self, context: CpueaxhX86Context, bridge: HostBridge) -> None:
+        bridge_ptr = self._as_bridge_pointer(bridge)
+        self._check(self._api.cpueaxh_host_call(byref(context), bridge_ptr), "cpueaxh_host_call failed")
 
     def code_exception(self) -> int:
         return int(self._api.cpueaxh_code_exception(self._engine))
@@ -340,6 +345,17 @@ class Engine:
             if regions_ptr:
                 self._api.cpueaxh_free(regions_ptr)
 
+    @staticmethod
+    def _as_bridge_pointer(bridge: HostBridge) -> c_void_p:
+        if isinstance(bridge, int):
+            return c_void_p(bridge)
+        if isinstance(bridge, c_void_p):
+            return bridge
+        try:
+            return ctypes.cast(bridge, c_void_p)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("bridge must be a function pointer, c_void_p, or integer address") from exc
+
     # Backward-compatible aliases for the earlier minimal glue.
     mem_map = map_memory
     mem_unmap = unmap_memory
@@ -356,6 +372,7 @@ class Engine:
     emu_start = start
     emu_start_function = start_function
     emu_stop = stop
+    host_bridge_call = host_call
     mem_regions = memory_regions
     escape_add = add_escape
     escape_del = delete_escape

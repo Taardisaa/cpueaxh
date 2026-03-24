@@ -5,6 +5,7 @@ project(cpueaxh LANGUAGES CXX)
 option(CPUEAXH_BUILD_EXAMPLE "Build the user-mode example program" ON)
 option(CPUEAXH_BUILD_TESTS "Build the user-mode test executable" ON)
 option(CPUEAXH_BUILD_SHARED "Build a Windows DLL for FFI / Python glue" ON)
+option(CPUEAXH_BUILD_NATIVE_BRIDGES "Build a small DLL exporting native escape bridge stubs for Python glue" ON)
 
 if(NOT WIN32)
     message(FATAL_ERROR "The current CMake build supports Windows user-mode builds only.")
@@ -93,6 +94,21 @@ if(CPUEAXH_BUILD_EXAMPLE)
     cpueaxh_apply_common_msvc_settings(cpueaxh_example)
 endif()
 
+if(CPUEAXH_BUILD_NATIVE_BRIDGES AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    add_library(cpueaxh_native_bridges SHARED
+        python/native_bridges/bridge_helpers.cpp
+        python/native_bridges/dllmain.cpp
+        example/demo/escape/escape.asm
+    )
+
+    set_target_properties(cpueaxh_native_bridges PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        OUTPUT_NAME cpueaxh_native_bridges
+    )
+
+    cpueaxh_apply_common_msvc_settings(cpueaxh_native_bridges)
+endif()
+
 if(CPUEAXH_BUILD_TESTS)
     add_executable(cpueaxh_test
         test/main.cpp
@@ -117,6 +133,14 @@ install(TARGETS cpueaxh
 if(CPUEAXH_BUILD_SHARED)
     install(TARGETS cpueaxh_shared
         EXPORT cpueaxhTargets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+if(CPUEAXH_BUILD_NATIVE_BRIDGES AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    install(TARGETS cpueaxh_native_bridges
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin

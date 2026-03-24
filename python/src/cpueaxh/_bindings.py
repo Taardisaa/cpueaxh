@@ -94,6 +94,10 @@ class CpueaxhApi:
         self.cpueaxh_emu_stop.argtypes = [c_void_p]
         self.cpueaxh_emu_stop.restype = None
 
+        self.cpueaxh_host_call = self.dll.cpueaxh_host_call
+        self.cpueaxh_host_call.argtypes = [POINTER(CpueaxhX86Context), c_void_p]
+        self.cpueaxh_host_call.restype = c_int
+
         self.cpueaxh_code_exception = self.dll.cpueaxh_code_exception
         self.cpueaxh_code_exception.argtypes = [c_void_p]
         self.cpueaxh_code_exception.restype = c_uint32

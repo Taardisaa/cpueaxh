@@ -74,6 +74,13 @@ This document tracks the current implementation status and the next recommended 
   - `add_memory_hook()`
   - `add_invalid_memory_hook()`
   - `delete_hook()`
+- `[x]` Native bridge glue:
+  - `host_call()`
+  - Python-side use of native bridge DLL exports through `ctypes`
+- `[x]` Host-mode Python helper layer:
+  - `HostPage`
+  - `NativeBridgeLibrary`
+  - `HostBridgeSession`
 - `[x]` Backward-compatible aliases for the earlier minimal API names.
 
 ### 2.3 Python Examples and Validation
@@ -90,15 +97,18 @@ This document tracks the current implementation status and the next recommended 
   - invalid memory hooks with retry / recovery
   - context round-trip of richer structures
   - `start_function()` semantics
+- `[x]` Add native-bridge smoke tests for:
+  - `cpuid`
+  - `xgetbv`
 - `[x]` Add negative-path tests for common error codes and argument validation.
 
 ### 2.4 Python API Gaps
 
 - `[x]` Wrap escape registration APIs (`cpueaxh_escape_add()` / `cpueaxh_escape_del()`).
-- `[ ]` Evaluate Python support for host-call / native bridge scenarios.
+- `[x]` Support Python as glue around `cpueaxh_host_call()` and native bridge DLL exports.
 - `[ ]` Add richer typed wrappers for additional register classes and exception enums.
 - `[ ]` Improve user-data / callback ergonomics beyond the current closure-based hook helpers.
-- `[ ]` Consider a more explicit page / mapping helper layer for Python-side ergonomics.
+- `[x]` Add a host-oriented page / mapping helper layer for Python-side ergonomics.
 
 ## 3. Kernel-Mode Support
 
@@ -137,7 +147,7 @@ This document tracks the current implementation status and the next recommended 
 The most practical next steps are:
 
 1. `[ ]` Add CI for user-mode CMake + Python smoke tests.
-2. `[ ]` Evaluate whether Python should expose a limited host-call bridge helper, or explicitly stay at software escape emulation only.
+2. `[ ]` Decide whether to add a higher-level host syscall demo or keep the native-bridge helpers focused on smaller, deterministic stubs.
 3. `[ ]` Write a dedicated kernel build/debug guide.
 4. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
 5. `[ ]` Expand Python examples into more realistic guest-mode workflows.

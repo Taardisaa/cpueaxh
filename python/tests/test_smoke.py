@@ -7,11 +7,12 @@ from cpueaxh import (
     CPUEAXH_ERR_HOOK,
     CPUEAXH_ERR_MODE,
     CPUEAXH_ESCAPE_INSN_CPUID,
+    CPUEAXH_ESCAPE_INSN_XGETBV,
     CPUEAXH_HOOK_CODE_PRE,
     CPUEAXH_HOOK_MEM_READ_UNMAPPED,
     CPUEAXH_HOOK_MEM_WRITE_PROT,
-    CPUEAXH_MEMORY_MODE_HOST,
     CPUEAXH_MEMORY_MODE_GUEST,
+    CPUEAXH_MEMORY_MODE_HOST,
     CPUEAXH_PROT_EXEC,
     CPUEAXH_PROT_READ,
     CPUEAXH_PROT_WRITE,
@@ -23,8 +24,11 @@ from cpueaxh import (
     CPUEAXH_X86_REG_RSP,
     CpueaxhError,
     Engine,
+    HostBridgeSession,
+    NativeBridgeLibrary,
 )
 from cpueaxh._loader import default_library_path
+from cpueaxh._loader import default_bridge_library_path
 
 
 class CpueaxhSmokeTests(unittest.TestCase):
@@ -38,9 +42,13 @@ class CpueaxhSmokeTests(unittest.TestCase):
             raise unittest.SkipTest(
                 f"cpueaxh_shared.dll was not found at the default locations; expected one near {cls.dll_path}"
             )
+        cls.bridge_dll_path = default_bridge_library_path()
 
     def make_engine(self) -> Engine:
         return Engine(dll_path=str(self.dll_path))
+
+    def make_bridge_library(self) -> NativeBridgeLibrary:
+        return NativeBridgeLibrary(self.bridge_dll_path)
 
     def test_guest_execution_sets_rax(self) -> None:
         code_address = 0x1000
@@ -333,6 +341,131 @@ class CpueaxhSmokeTests(unittest.TestCase):
                 self.assertEqual(duplicate_error.exception.code, CPUEAXH_ERR_HOOK)
             finally:
                 engine.delete_escape(first)
+
+    def test_host_call_can_invoke_native_cpuid_bridge(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        bridges = self.make_bridge_library()
+        cpuid_bridge = bridges.symbol("cpueaxh_example_execute_cpuid")
+        query_cpuid = bridges.function(
+            "cpueaxh_example_query_cpuid",
+            None,
+            [
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+            ],
+        )
+
+        code = bytes(
+            [
+                0xB8, 0x00, 0x00, 0x00, 0x00,
+                0x31, 0xC9,
+                0x0F, 0xA2,
+            ]
+        )
+        expected_eax = ctypes.c_uint32()
+        expected_ebx = ctypes.c_uint32()
+        expected_ecx = ctypes.c_uint32()
+        expected_edx = ctypes.c_uint32()
+        query_cpuid(0, 0, expected_eax, expected_ebx, expected_ecx, expected_edx)
+
+        with HostBridgeSession(dll_path=str(self.dll_path)) as session:
+            _, code_address = session.load_code(code)
+            escape = session.add_host_call_escape(
+                CPUEAXH_ESCAPE_INSN_CPUID,
+                cpuid_bridge,
+                code_address,
+                code_address + len(code) - 1,
+            )
+            try:
+                session.start(code_address, count=3)
+            finally:
+                session.engine.delete_escape(escape)
+
+            self.assertEqual(session.engine.read_register_u64(CPUEAXH_X86_REG_RAX) & 0xFFFFFFFF, expected_eax.value)
+            self.assertEqual(session.engine.read_register_u64(CPUEAXH_X86_REG_RBX) & 0xFFFFFFFF, expected_ebx.value)
+            self.assertEqual(session.engine.read_register_u64(CPUEAXH_X86_REG_RCX) & 0xFFFFFFFF, expected_ecx.value)
+            self.assertEqual(session.engine.read_register_u64(CPUEAXH_X86_REG_RDX) & 0xFFFFFFFF, expected_edx.value)
+
+    def test_host_call_can_invoke_native_xgetbv_bridge(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        bridges = self.make_bridge_library()
+        cpuid_query = bridges.function(
+            "cpueaxh_example_query_cpuid",
+            None,
+            [
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_uint32),
+            ],
+        )
+        eax = ctypes.c_uint32()
+        ebx = ctypes.c_uint32()
+        ecx = ctypes.c_uint32()
+        edx = ctypes.c_uint32()
+        cpuid_query(1, 0, eax, ebx, ecx, edx)
+        if (ecx.value & (1 << 26)) == 0 or (ecx.value & (1 << 27)) == 0:
+            self.skipTest("host CPU/OS does not report XSAVE+OSXSAVE support required for xgetbv")
+
+        xgetbv_bridge = bridges.symbol("cpueaxh_example_execute_xgetbv")
+        query_xgetbv = bridges.function(
+            "cpueaxh_example_query_xgetbv",
+            ctypes.c_uint64,
+            [ctypes.c_uint32],
+        )
+        expected = int(query_xgetbv(0))
+        code = bytes(
+            [
+                0x31, 0xC9,
+                0x0F, 0x01, 0xD0,
+            ]
+        )
+
+        with HostBridgeSession(dll_path=str(self.dll_path)) as session:
+            _, code_address = session.load_code(code)
+            escape = session.add_host_call_escape(
+                CPUEAXH_ESCAPE_INSN_XGETBV,
+                xgetbv_bridge,
+                code_address,
+                code_address + len(code) - 1,
+            )
+            try:
+                session.start(code_address, count=2)
+            finally:
+                session.engine.delete_escape(escape)
+
+            actual = (
+                (session.engine.read_register_u64(CPUEAXH_X86_REG_RDX) & 0xFFFFFFFF) << 32
+                | (session.engine.read_register_u64(CPUEAXH_X86_REG_RAX) & 0xFFFFFFFF)
+            )
+            self.assertEqual(actual, expected)
+
+    def test_host_call_rejects_plain_context_without_escape_bridge_block(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        cpuid_bridge = self.make_bridge_library().symbol("cpueaxh_example_execute_cpuid")
+
+        with self.make_engine() as engine:
+            with self.assertRaises(CpueaxhError) as host_call_error:
+                engine.host_call(engine.read_context(), cpuid_bridge)
+            self.assertEqual(host_call_error.exception.code, CPUEAXH_ERR_ARG)
 
 
 if __name__ == "__main__":
