@@ -452,8 +452,8 @@ From another CMake project, you can integrate the library with `add_subdirectory
 
 ### Python glue
 
-The repository now also includes a minimal `ctypes` wrapper at [python/cpueaxh.py](python/cpueaxh.py).
-It targets the user-mode API and is intended for `Windows + Python + cpueaxh_shared.dll`.
+The repository now also includes a small Python package under [python](python).
+It provides a `ctypes`-based wrapper for the user-mode API and is intended for `Windows + Python + cpueaxh_shared.dll`.
 
 Build the shared library:
 
@@ -462,14 +462,25 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -T v145 -DCPUEAXH_BUILD_SH
 cmake --build build --config Debug --target cpueaxh_shared
 ```
 
-Run the Python guest-mode demo:
+Install the Python package in editable mode:
 
 ```powershell
-python python\guest_demo.py
+python -m pip install -e python
 ```
 
-The demo script loads `cpueaxh_shared.dll`, maps a guest page, executes `mov rax, 42; ret`, and prints the resulting `RAX` value.
-If the DLL is not in one of the default build output locations, pass its explicit path to `Engine(dll_path=...)`.
+Run the guest-mode demo:
+
+```powershell
+python -m cpueaxh.examples.guest_demo
+```
+
+The package entry points are centered around:
+- `cpueaxh.Engine`
+- `cpueaxh.CpueaxhError`
+- `cpueaxh.CpueaxhX86Context`
+
+The demo loads `cpueaxh_shared.dll`, maps a guest page, executes one `mov rax, 42` instruction, and prints the resulting `RAX` value.
+If the DLL is not in one of the default build output locations, set `CPUEAXH_DLL_PATH` or pass an explicit path to `Engine(dll_path=...)`.
 
 ## License
 

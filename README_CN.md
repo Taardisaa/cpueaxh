@@ -452,8 +452,8 @@ cmake --build build --config Debug
 
 ### Python glue
 
-仓库现在也包含了一个最小可用的 `ctypes` 包装层：[python/cpueaxh.py](python/cpueaxh.py)。
-当前它面向用户态 API，适用于 `Windows + Python + cpueaxh_shared.dll` 的组合。
+仓库现在也包含了一个位于 [python](python) 目录下的小型 Python 包。
+它通过 `ctypes` 包装用户态 API，适用于 `Windows + Python + cpueaxh_shared.dll` 的组合。
 
 先构建共享库：
 
@@ -462,14 +462,25 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -T v145 -DCPUEAXH_BUILD_SH
 cmake --build build --config Debug --target cpueaxh_shared
 ```
 
-然后运行 Python guest-mode 演示：
+以 editable 模式安装 Python 包：
 
 ```powershell
-python python\guest_demo.py
+python -m pip install -e python
 ```
 
-这个演示会加载 `cpueaxh_shared.dll`，映射一个 guest 页，执行 `mov rax, 42; ret`，并打印最终的 `RAX` 值。
-如果 DLL 不在默认搜索到的几个构建输出目录里，也可以通过 `Engine(dll_path=...)` 显式传入路径。
+然后运行 guest-mode 演示：
+
+```powershell
+python -m cpueaxh.examples.guest_demo
+```
+
+这个包当前的主要入口包括：
+- `cpueaxh.Engine`
+- `cpueaxh.CpueaxhError`
+- `cpueaxh.CpueaxhX86Context`
+
+这个演示会加载 `cpueaxh_shared.dll`，映射一个 guest 页，只执行一条 `mov rax, 42` 指令，并打印最终的 `RAX` 值。
+如果 DLL 不在默认搜索到的几个构建输出目录里，也可以通过设置 `CPUEAXH_DLL_PATH`，或在 `Engine(dll_path=...)` 中显式传入路径。
 
 ## 开源协议
 
