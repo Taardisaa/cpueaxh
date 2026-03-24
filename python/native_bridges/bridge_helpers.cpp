@@ -1,3 +1,4 @@
+#include <windows.h>
 #include <intrin.h>
 #include <stdint.h>
 
@@ -18,4 +19,14 @@ extern "C" __declspec(dllexport) void cpueaxh_example_query_cpuid(
 
 extern "C" __declspec(dllexport) unsigned __int64 cpueaxh_example_query_xgetbv(uint32_t index) {
     return static_cast<unsigned __int64>(_xgetbv(index));
+}
+
+extern "C" __declspec(dllexport) uint16_t cpueaxh_example_query_gs_selector() {
+    CONTEXT context = {};
+    RtlCaptureContext(&context);
+    return context.SegGs;
+}
+
+extern "C" __declspec(dllexport) uintptr_t cpueaxh_example_query_teb() {
+    return reinterpret_cast<uintptr_t>(NtCurrentTeb());
 }

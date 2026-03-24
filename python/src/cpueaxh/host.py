@@ -5,10 +5,14 @@ from dataclasses import dataclass
 from os import PathLike
 
 from ._constants import (
+    CPUEAXH_ESCAPE_INSN_SYSCALL,
     CPUEAXH_MEMORY_MODE_HOST,
     CPUEAXH_PROT_EXEC,
     CPUEAXH_PROT_READ,
     CPUEAXH_PROT_WRITE,
+    CPUEAXH_X86_REG_GS_BASE,
+    CPUEAXH_X86_REG_GS_SELECTOR,
+    CPUEAXH_X86_REG_RAX,
     CPUEAXH_X86_REG_RBP,
     CPUEAXH_X86_REG_RIP,
     CPUEAXH_X86_REG_RSP,
@@ -22,10 +26,29 @@ MEM_RELEASE = 0x8000
 PAGE_READWRITE = 0x04
 PAGE_SIZE = 0x1000
 STACK_RED_ZONE = 0x80
+WINDOWS_X64_ARGUMENT_REGISTERS = (
+    1,   # RCX
+    2,   # RDX
+    8,   # R8
+    9,   # R9
+)
 
 
 def _page_align(value: int) -> int:
     return (value + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)
+
+
+def _extract_windows_x64_syscall_number(function_address: int) -> int:
+    stub = ctypes.string_at(function_address, 32)
+    pattern = b"\x4C\x8B\xD1\xB8"
+    offset = stub.find(pattern)
+    if offset < 0:
+        raise ValueError("the target export does not look like a Windows x64 syscall stub")
+
+    if b"\x0F\x05" not in stub[offset:]:
+        raise ValueError("the target export does not contain a syscall instruction near the stub prologue")
+
+    return int.from_bytes(stub[offset + 4:offset + 8], "little")
 
 
 @dataclass(slots=True)
@@ -85,11 +108,78 @@ class NativeBridgeLibrary:
         bridge.restype = None
         return bridge
 
+    def symbol_address(self, name: str) -> int:
+        return int(ctypes.cast(getattr(self.dll, name), ctypes.c_void_p).value)
+
+    def syscall_number(self, name: str) -> int:
+        return _extract_windows_x64_syscall_number(self.symbol_address(name))
+
     def function(self, name: str, restype, argtypes: list[object]):
         func = getattr(self.dll, name)
         func.restype = restype
         func.argtypes = argtypes
         return func
+
+
+@dataclass(slots=True)
+class WindowsSyscallBufferSpec:
+    size: int
+    data: bytes | bytearray | memoryview = b""
+    perms: int = CPUEAXH_PROT_READ | CPUEAXH_PROT_WRITE
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        payload_size = len(bytes(self.data))
+        self.size = max(int(self.size), payload_size)
+        if self.size <= 0:
+            raise ValueError("buffer spec size must be positive")
+
+
+@dataclass(slots=True)
+class WindowsSyscallBuffer:
+    address: int
+    size: int
+    page: HostPage
+    label: str | None = None
+
+    def read(self, size: int | None = None, offset: int = 0) -> bytes:
+        actual_size = self.size - offset if size is None else size
+        if offset < 0 or actual_size < 0 or offset + actual_size > self.size:
+            raise ValueError("requested range is outside the syscall buffer")
+        return ctypes.string_at(self.address + offset, actual_size)
+
+    def write(self, data: bytes | bytearray | memoryview, offset: int = 0) -> None:
+        payload = bytes(data)
+        if offset < 0 or offset + len(payload) > self.size:
+            raise ValueError("payload does not fit in the syscall buffer")
+        ctypes.memmove(self.address + offset, payload, len(payload))
+
+    def read_u64(self, offset: int = 0) -> int:
+        return int.from_bytes(self.read(8, offset), "little")
+
+
+@dataclass(slots=True)
+class WindowsSyscallSpec:
+    function_address: int
+    arguments: tuple[int | WindowsSyscallBufferSpec, ...]
+    name: str | None = None
+
+
+@dataclass(slots=True)
+class WindowsSyscallResult:
+    rax: int
+    status: int
+    arguments: tuple[int, ...]
+    buffers_by_index: dict[int, WindowsSyscallBuffer]
+    buffers_by_label: dict[str, WindowsSyscallBuffer]
+
+    def buffer_at(self, argument_index: int) -> WindowsSyscallBuffer:
+        if argument_index < 1:
+            raise ValueError("argument indices are 1-based")
+        return self.buffers_by_index[argument_index]
+
+    def buffer(self, label: str) -> WindowsSyscallBuffer:
+        return self.buffers_by_label[label]
 
 
 class HostBridgeSession:
@@ -138,8 +228,117 @@ class HostBridgeSession:
 
         return self.engine.add_escape(instruction_id, _callback, begin, end)
 
+    def apply_windows_host_context(self, bridges: NativeBridgeLibrary) -> None:
+        query_gs_selector = bridges.function("cpueaxh_example_query_gs_selector", ctypes.c_uint16, [])
+        query_teb = bridges.function("cpueaxh_example_query_teb", ctypes.c_uint64, [])
+        self.engine.write_register_u64(CPUEAXH_X86_REG_GS_SELECTOR, int(query_gs_selector()))
+        self.engine.write_register_u64(CPUEAXH_X86_REG_GS_BASE, int(query_teb()))
+
+    def write_register_u64(self, regid: int, value: int) -> None:
+        self.engine.write_register_u64(regid, value)
+
+    def read_register_u64(self, regid: int) -> int:
+        return self.engine.read_register_u64(regid)
+
+    def write_memory(self, address: int, data: bytes | bytearray | memoryview) -> None:
+        self.engine.write_memory(address, data)
+
+    def read_memory(self, address: int, size: int) -> bytes:
+        return self.engine.read_memory(address, size)
+
+    def write_stack_qword(self, offset: int, value: int) -> None:
+        self.engine.write_memory(self.stack_top + offset, int(value).to_bytes(8, "little", signed=False))
+
+    def set_windows_x64_stack_argument(self, argument_index: int, value: int) -> None:
+        if argument_index < 5:
+            raise ValueError("stack arguments start at Windows x64 argument index 5")
+        offset = 0x28 + (argument_index - 5) * 8
+        self.write_stack_qword(offset, value)
+
+    def set_windows_x64_arguments(self, arguments: list[int] | tuple[int, ...]) -> None:
+        for regid in WINDOWS_X64_ARGUMENT_REGISTERS:
+            self.write_register_u64(regid, 0)
+
+        for index, value in enumerate(arguments, start=1):
+            if index <= len(WINDOWS_X64_ARGUMENT_REGISTERS):
+                self.write_register_u64(WINDOWS_X64_ARGUMENT_REGISTERS[index - 1], value)
+            else:
+                self.set_windows_x64_stack_argument(index, value)
+
+    def prepare_windows_x64_call(self, function_address: int, arguments: list[int] | tuple[int, ...]) -> None:
+        self.set_windows_x64_arguments(arguments)
+        self.write_register_u64(CPUEAXH_X86_REG_RIP, function_address)
+
+    def create_syscall_buffer(self, spec: WindowsSyscallBufferSpec) -> WindowsSyscallBuffer:
+        page = self.allocate_page(max(PAGE_SIZE, spec.size))
+        self.map_page(page, spec.perms)
+        buffer = WindowsSyscallBuffer(
+            address=page.address,
+            size=spec.size,
+            page=page,
+            label=spec.label,
+        )
+        if spec.data:
+            buffer.write(spec.data)
+        return buffer
+
+    def invoke_windows_syscall_spec(
+        self,
+        spec: WindowsSyscallSpec,
+        syscall_bridge,
+        timeout: int = 0,
+        count: int = 0,
+    ) -> WindowsSyscallResult:
+        resolved_arguments: list[int] = []
+        buffers_by_index: dict[int, WindowsSyscallBuffer] = {}
+        buffers_by_label: dict[str, WindowsSyscallBuffer] = {}
+
+        for argument_index, argument in enumerate(spec.arguments, start=1):
+            if isinstance(argument, WindowsSyscallBufferSpec):
+                buffer = self.create_syscall_buffer(argument)
+                resolved_arguments.append(buffer.address)
+                buffers_by_index[argument_index] = buffer
+                if buffer.label:
+                    buffers_by_label[buffer.label] = buffer
+            else:
+                resolved_arguments.append(int(argument))
+
+        rax = self.invoke_windows_syscall(
+            spec.function_address,
+            syscall_bridge,
+            tuple(resolved_arguments),
+            timeout=timeout,
+            count=count,
+        )
+        return WindowsSyscallResult(
+            rax=rax,
+            status=rax & 0xFFFFFFFF,
+            arguments=tuple(resolved_arguments),
+            buffers_by_index=buffers_by_index,
+            buffers_by_label=buffers_by_label,
+        )
+
+    def invoke_windows_syscall(
+        self,
+        syscall_address: int,
+        syscall_bridge,
+        arguments: list[int] | tuple[int, ...],
+        timeout: int = 0,
+        count: int = 0,
+    ) -> int:
+        self.prepare_windows_x64_call(syscall_address, arguments)
+        escape = self.add_host_call_escape(CPUEAXH_ESCAPE_INSN_SYSCALL, syscall_bridge)
+        try:
+            self.start_function(0, timeout=timeout, count=count)
+        finally:
+            self.engine.delete_escape(escape)
+        return self.read_register_u64(CPUEAXH_X86_REG_RAX)
+
     def start(self, begin: int, until: int = 0, timeout: int = 0, count: int = 0) -> None:
         self.engine.start(begin, until, timeout, count)
+
+    def start_function(self, begin: int = 0, timeout: int = 0, count: int = 0) -> None:
+        self.engine.start_function(begin, timeout, count)
 
     def close(self) -> None:
         page_errors: list[Exception] = []

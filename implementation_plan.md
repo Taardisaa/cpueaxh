@@ -81,6 +81,9 @@ This document tracks the current implementation status and the next recommended 
   - `HostPage`
   - `NativeBridgeLibrary`
   - `HostBridgeSession`
+  - `WindowsSyscallBufferSpec`
+  - `WindowsSyscallSpec`
+  - `WindowsSyscallResult`
 - `[x]` Backward-compatible aliases for the earlier minimal API names.
 
 ### 2.3 Python Examples and Validation
@@ -100,6 +103,8 @@ This document tracks the current implementation status and the next recommended 
 - `[x]` Add native-bridge smoke tests for:
   - `cpuid`
   - `xgetbv`
+- `[x]` Add a host `NtReadFile` syscall-bridge demo and smoke test.
+- `[x]` Add a direct-`syscall` shellcode demo and smoke test where Python only supplies the generic `SYSCALL` escape bridge.
 - `[x]` Add negative-path tests for common error codes and argument validation.
 
 ### 2.4 Python API Gaps
@@ -147,12 +152,20 @@ This document tracks the current implementation status and the next recommended 
 The most practical next steps are:
 
 1. `[ ]` Add CI for user-mode CMake + Python smoke tests.
-2. `[ ]` Decide whether to add a higher-level host syscall demo or keep the native-bridge helpers focused on smaller, deterministic stubs.
-3. `[ ]` Write a dedicated kernel build/debug guide.
-4. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
-5. `[ ]` Expand Python examples into more realistic guest-mode workflows.
+2. `[x]` Generalize the current `NtReadFile` demo path into a reusable pattern for additional host syscalls.
+   Current shape:
+   - `invoke_windows_syscall()`
+   - `invoke_windows_syscall_spec()`
+   - `WindowsSyscallSpec`
+   - `WindowsSyscallResult`
+3. `[ ]` Add a generic direct-`syscall` / `sysenter` shellcode guide that focuses on emulator-driven native escapes rather than Python-constructed syscall calls.
+4. `[ ]` Write a dedicated kernel build/debug guide.
+5. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
+6. `[ ]` Expand Python examples into more realistic guest-mode workflows.
 
 ## 6. Notes
 
 - The Python layer is now in a good "usable and test-backed" state for guest-mode experimentation and basic hook workflows, but it should still be treated as an evolving binding rather than a complete, frozen API.
+- For syscall-oriented emulation, the preferred direction is now clearer: let shellcode arrange its own registers and stack, and keep Python limited to host-mode setup plus generic escape forwarding.
+- The higher-level Windows syscall helpers are still useful as convenience scaffolding for tests and demos, but they are not meant to replace the emulator-centric direct-`syscall` path.
 - The kernel-mode portion is present and functional at the project/sample level, but it is much less validated and documented than the user-mode and Python paths.

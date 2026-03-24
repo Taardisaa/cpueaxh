@@ -1,5 +1,7 @@
 import ctypes
+import os
 import sys
+import tempfile
 import unittest
 
 from cpueaxh import (
@@ -7,6 +9,7 @@ from cpueaxh import (
     CPUEAXH_ERR_HOOK,
     CPUEAXH_ERR_MODE,
     CPUEAXH_ESCAPE_INSN_CPUID,
+    CPUEAXH_ESCAPE_INSN_SYSCALL,
     CPUEAXH_ESCAPE_INSN_XGETBV,
     CPUEAXH_HOOK_CODE_PRE,
     CPUEAXH_HOOK_MEM_READ_UNMAPPED,
@@ -26,9 +29,12 @@ from cpueaxh import (
     Engine,
     HostBridgeSession,
     NativeBridgeLibrary,
+    WindowsSyscallBufferSpec,
+    WindowsSyscallSpec,
 )
 from cpueaxh._loader import default_library_path
 from cpueaxh._loader import default_bridge_library_path
+from cpueaxh.examples.ntreadfile_shellcode_demo import build_direct_ntreadfile_syscall_shellcode
 
 
 class CpueaxhSmokeTests(unittest.TestCase):
@@ -466,6 +472,180 @@ class CpueaxhSmokeTests(unittest.TestCase):
             with self.assertRaises(CpueaxhError) as host_call_error:
                 engine.host_call(engine.read_context(), cpuid_bridge)
             self.assertEqual(host_call_error.exception.code, CPUEAXH_ERR_ARG)
+
+    def test_ntreadfile_syscall_bridge_reads_expected_bytes(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        payload = b"cpueaxh NtReadFile smoke"
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(payload)
+            path = handle.name
+
+        kernel32 = ctypes.WinDLL("kernel32.dll")
+        kernel32.CreateFileW.argtypes = [
+            ctypes.c_wchar_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+        ]
+        kernel32.CreateFileW.restype = ctypes.c_void_p
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+        handle_value = kernel32.CreateFileW(
+            path,
+            0x80000000,
+            0x00000001,
+            None,
+            3,
+            0x00000080,
+            None,
+        )
+        if handle_value == ctypes.c_void_p(-1).value:
+            self.fail("CreateFileW failed for NtReadFile smoke test")
+
+        try:
+            bridges = self.make_bridge_library()
+            syscall_bridge = bridges.symbol("cpueaxh_example_execute_syscall")
+            ntdll = NativeBridgeLibrary("ntdll.dll")
+            nt_read_file = ntdll.symbol_address("NtReadFile")
+
+            with HostBridgeSession(dll_path=str(self.dll_path)) as session:
+                session.apply_windows_host_context(bridges)
+                result = session.invoke_windows_syscall_spec(
+                    WindowsSyscallSpec(
+                        function_address=nt_read_file,
+                        name="NtReadFile",
+                        arguments=(
+                            int(handle_value),
+                            0,
+                            0,
+                            0,
+                            WindowsSyscallBufferSpec(16, label="io_status"),
+                            WindowsSyscallBufferSpec(len(payload), label="buffer"),
+                            len(payload),
+                            0,
+                            0,
+                        ),
+                    ),
+                    syscall_bridge,
+                )
+                transferred = result.buffer("io_status").read_u64(8)
+                content = result.buffer("buffer").read()
+
+                self.assertEqual(result.status, 0)
+                self.assertEqual(transferred, len(payload))
+                self.assertEqual(content, payload)
+        finally:
+            kernel32.CloseHandle(ctypes.c_void_p(handle_value))
+            os.unlink(path)
+
+    def test_direct_syscall_shellcode_reads_expected_bytes(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        payload = b"cpueaxh direct syscall smoke"
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(payload)
+            path = handle.name
+
+        kernel32 = ctypes.WinDLL("kernel32.dll")
+        kernel32.CreateFileW.argtypes = [
+            ctypes.c_wchar_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+        ]
+        kernel32.CreateFileW.restype = ctypes.c_void_p
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+        handle_value = kernel32.CreateFileW(
+            path,
+            0x80000000,
+            0x00000001,
+            None,
+            3,
+            0x00000080,
+            None,
+        )
+        if handle_value == ctypes.c_void_p(-1).value:
+            self.fail("CreateFileW failed for direct-syscall smoke test")
+
+        try:
+            bridges = self.make_bridge_library()
+            syscall_bridge = bridges.symbol("cpueaxh_example_execute_syscall")
+            ntdll = NativeBridgeLibrary("ntdll.dll")
+            nt_read_file_syscall_number = ntdll.syscall_number("NtReadFile")
+
+            with HostBridgeSession(dll_path=str(self.dll_path)) as session:
+                session.apply_windows_host_context(bridges)
+                io_status = session.create_syscall_buffer(WindowsSyscallBufferSpec(16, label="io_status"))
+                output = session.create_syscall_buffer(WindowsSyscallBufferSpec(len(payload), label="buffer"))
+                shellcode = build_direct_ntreadfile_syscall_shellcode(
+                    int(handle_value),
+                    io_status.address,
+                    output.address,
+                    len(payload),
+                    nt_read_file_syscall_number,
+                )
+                _, shellcode_address = session.load_code(shellcode)
+
+                hits: list[int] = []
+
+                def on_syscall(context) -> None:
+                    hits.append(int(context.rip))
+                    session.engine.host_call(context, syscall_bridge)
+
+                escape = session.engine.add_escape(CPUEAXH_ESCAPE_INSN_SYSCALL, on_syscall)
+                try:
+                    session.start_function(shellcode_address, count=0)
+                finally:
+                    session.engine.delete_escape(escape)
+
+                transferred = io_status.read_u64(8)
+                content = output.read()
+                status = session.read_register_u64(CPUEAXH_X86_REG_RAX) & 0xFFFFFFFF
+
+                self.assertEqual(status, 0)
+                self.assertEqual(transferred, len(payload))
+                self.assertEqual(content, payload)
+                self.assertEqual(len(hits), 1)
+        finally:
+            kernel32.CloseHandle(ctypes.c_void_p(handle_value))
+            os.unlink(path)
+
+    def test_invoke_windows_syscall_handles_register_only_arguments(self) -> None:
+        if not self.bridge_dll_path.exists():
+            self.skipTest(
+                f"cpueaxh_native_bridges.dll was not found at the default locations; expected one near {self.bridge_dll_path}"
+            )
+
+        bridges = self.make_bridge_library()
+        syscall_bridge = bridges.symbol("cpueaxh_example_execute_syscall")
+        ntdll = NativeBridgeLibrary("ntdll.dll")
+        nt_close = ntdll.symbol_address("NtClose")
+
+        with HostBridgeSession(dll_path=str(self.dll_path)) as session:
+            session.apply_windows_host_context(bridges)
+            result = session.invoke_windows_syscall_spec(
+                WindowsSyscallSpec(
+                    function_address=nt_close,
+                    name="NtClose",
+                    arguments=(0,),
+                ),
+                syscall_bridge,
+            )
+            self.assertEqual(result.status, 0xC0000008)
 
 
 if __name__ == "__main__":

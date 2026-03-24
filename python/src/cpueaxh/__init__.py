@@ -2,7 +2,15 @@ from ._version import __version__
 from ._constants import *  # noqa: F401,F403
 from .engine import Engine, MemoryRegion
 from .errors import CpueaxhError
-from .host import HostBridgeSession, HostPage, NativeBridgeLibrary
+from .host import (
+    HostBridgeSession,
+    HostPage,
+    NativeBridgeLibrary,
+    WindowsSyscallBuffer,
+    WindowsSyscallBufferSpec,
+    WindowsSyscallResult,
+    WindowsSyscallSpec,
+)
 from .types import (
     CpueaxhMemRegion,
     CpueaxhX86Context,
@@ -19,6 +27,10 @@ __all__ = [
     "HostPage",
     "MemoryRegion",
     "NativeBridgeLibrary",
+    "WindowsSyscallBuffer",
+    "WindowsSyscallBufferSpec",
+    "WindowsSyscallResult",
+    "WindowsSyscallSpec",
     "CpueaxhMemRegion",
     "CpueaxhX86Context",
     "CpueaxhX86Segment",
