@@ -94,7 +94,7 @@ This document tracks the current implementation status and the next recommended 
 
 ### 2.4 Python API Gaps
 
-- `[ ]` Wrap escape registration APIs (`cpueaxh_escape_add()` / `cpueaxh_escape_del()`).
+- `[x]` Wrap escape registration APIs (`cpueaxh_escape_add()` / `cpueaxh_escape_del()`).
 - `[ ]` Evaluate Python support for host-call / native bridge scenarios.
 - `[ ]` Add richer typed wrappers for additional register classes and exception enums.
 - `[ ]` Improve user-data / callback ergonomics beyond the current closure-based hook helpers.
@@ -136,8 +136,8 @@ This document tracks the current implementation status and the next recommended 
 
 The most practical next steps are:
 
-1. `[ ]` Implement Python wrappers for escape registration APIs.
-2. `[ ]` Add CI for user-mode CMake + Python smoke tests.
+1. `[ ]` Add CI for user-mode CMake + Python smoke tests.
+2. `[ ]` Evaluate whether Python should expose a limited host-call bridge helper, or explicitly stay at software escape emulation only.
 3. `[ ]` Write a dedicated kernel build/debug guide.
 4. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
 5. `[ ]` Expand Python examples into more realistic guest-mode workflows.

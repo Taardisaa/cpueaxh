@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from os import PathLike
 from typing import Callable
 
-from ._bindings import CODE_HOOK_CALLBACK, INVALID_MEM_HOOK_CALLBACK, MEM_HOOK_CALLBACK, CpueaxhApi
-from ._constants import CPUEAXH_ARCH_X86, CPUEAXH_ERR_OK, CPUEAXH_MODE_64
+from ._bindings import CODE_HOOK_CALLBACK, ESCAPE_CALLBACK, INVALID_MEM_HOOK_CALLBACK, MEM_HOOK_CALLBACK, CpueaxhApi
+from ._constants import CPUEAXH_ARCH_X86, CPUEAXH_ERR_ARG, CPUEAXH_ERR_OK, CPUEAXH_MODE_64
 from .errors import CpueaxhError
 from .types import CpueaxhMemRegion, CpueaxhX86Context
 
@@ -34,6 +34,7 @@ class MemoryRegion:
 CodeHookCallback = Callable[[int], None]
 MemoryHookCallback = Callable[[int, int, int, int], None]
 InvalidMemoryHookCallback = Callable[[int, int, int, int], int | bool]
+EscapeCallback = Callable[[CpueaxhX86Context], int | None]
 
 
 class Engine:
@@ -43,6 +44,7 @@ class Engine:
         self._closed = False
         self._mapped_buffers: dict[int, object] = {}
         self._hook_callbacks: dict[int, object] = {}
+        self._escape_callbacks: dict[int, object] = {}
         self._patch_buffers: dict[int, object] = {}
         self._check(
             self._api.cpueaxh_open(CPUEAXH_ARCH_X86, CPUEAXH_MODE_64, byref(self._engine)),
@@ -58,6 +60,7 @@ class Engine:
             self._api.cpueaxh_close(self._engine)
             self._mapped_buffers.clear()
             self._hook_callbacks.clear()
+            self._escape_callbacks.clear()
             self._patch_buffers.clear()
             self._closed = True
 
@@ -291,6 +294,38 @@ class Engine:
     def delete_hook(self, handle: int) -> None:
         self._check(self._api.cpueaxh_hook_del(self._engine, handle), "cpueaxh_hook_del failed")
         self._hook_callbacks.pop(handle, None)
+        self._escape_callbacks.pop(handle, None)
+
+    def add_escape(self, instruction_id: int, callback: EscapeCallback, begin: int = 0, end: int = 0) -> int:
+        handle = c_uint64()
+
+        def _callback(_engine_ptr: int, context_ptr: POINTER(CpueaxhX86Context), _instruction_ptr: int, _user_data: int) -> int:
+            result = callback(context_ptr.contents)
+            if result is None:
+                return CPUEAXH_ERR_OK
+            if isinstance(result, bool):
+                return CPUEAXH_ERR_OK if result else CPUEAXH_ERR_ARG
+            return int(result)
+
+        c_callback = ESCAPE_CALLBACK(_callback)
+        self._check(
+            self._api.cpueaxh_escape_add(
+                self._engine,
+                byref(handle),
+                instruction_id,
+                ctypes.cast(c_callback, c_void_p),
+                None,
+                begin,
+                end,
+            ),
+            "cpueaxh_escape_add failed",
+        )
+        self._escape_callbacks[int(handle.value)] = c_callback
+        return int(handle.value)
+
+    def delete_escape(self, handle: int) -> None:
+        self._check(self._api.cpueaxh_escape_del(self._engine, handle), "cpueaxh_escape_del failed")
+        self._escape_callbacks.pop(handle, None)
 
     def memory_regions(self) -> list[MemoryRegion]:
         regions_ptr = POINTER(CpueaxhMemRegion)()
@@ -322,3 +357,5 @@ class Engine:
     emu_start_function = start_function
     emu_stop = stop
     mem_regions = memory_regions
+    escape_add = add_escape
+    escape_del = delete_escape

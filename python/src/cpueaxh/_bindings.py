@@ -9,6 +9,7 @@ from .types import CpueaxhMemRegion, CpueaxhX86Context
 CODE_HOOK_CALLBACK = ctypes.CFUNCTYPE(None, c_void_p, c_uint64, c_void_p)
 MEM_HOOK_CALLBACK = ctypes.CFUNCTYPE(None, c_void_p, c_uint32, c_uint64, c_size_t, c_uint64, c_void_p)
 INVALID_MEM_HOOK_CALLBACK = ctypes.CFUNCTYPE(c_int, c_void_p, c_uint32, c_uint64, c_size_t, c_uint64, c_void_p)
+ESCAPE_CALLBACK = ctypes.CFUNCTYPE(c_int, c_void_p, POINTER(CpueaxhX86Context), c_void_p, c_void_p)
 
 
 class CpueaxhApi:
@@ -124,6 +125,14 @@ class CpueaxhApi:
         self.cpueaxh_hook_del = self.dll.cpueaxh_hook_del
         self.cpueaxh_hook_del.argtypes = [c_void_p, c_uint64]
         self.cpueaxh_hook_del.restype = c_int
+
+        self.cpueaxh_escape_add = self.dll.cpueaxh_escape_add
+        self.cpueaxh_escape_add.argtypes = [c_void_p, POINTER(c_uint64), c_uint32, c_void_p, c_void_p, c_uint64, c_uint64]
+        self.cpueaxh_escape_add.restype = c_int
+
+        self.cpueaxh_escape_del = self.dll.cpueaxh_escape_del
+        self.cpueaxh_escape_del.argtypes = [c_void_p, c_uint64]
+        self.cpueaxh_escape_del.restype = c_int
 
         self.cpueaxh_free = self.dll.cpueaxh_free
         self.cpueaxh_free.argtypes = [c_void_p]

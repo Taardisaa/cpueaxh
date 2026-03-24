@@ -4,7 +4,9 @@ import unittest
 
 from cpueaxh import (
     CPUEAXH_ERR_ARG,
+    CPUEAXH_ERR_HOOK,
     CPUEAXH_ERR_MODE,
+    CPUEAXH_ESCAPE_INSN_CPUID,
     CPUEAXH_HOOK_CODE_PRE,
     CPUEAXH_HOOK_MEM_READ_UNMAPPED,
     CPUEAXH_HOOK_MEM_WRITE_PROT,
@@ -13,9 +15,12 @@ from cpueaxh import (
     CPUEAXH_PROT_EXEC,
     CPUEAXH_PROT_READ,
     CPUEAXH_PROT_WRITE,
-    CPUEAXH_X86_REG_RSP,
     CPUEAXH_X86_REG_RAX,
+    CPUEAXH_X86_REG_RBX,
+    CPUEAXH_X86_REG_RCX,
+    CPUEAXH_X86_REG_RDX,
     CPUEAXH_X86_REG_RIP,
+    CPUEAXH_X86_REG_RSP,
     CpueaxhError,
     Engine,
 )
@@ -233,6 +238,51 @@ class CpueaxhSmokeTests(unittest.TestCase):
             self.assertEqual(round_tripped.control_regs[3], context.control_regs[3])
             self.assertEqual(round_tripped.processor_id, context.processor_id)
 
+    def test_cpuid_escape_can_override_register_results(self) -> None:
+        code_address = 0x5000
+        code = bytes(
+            [
+                0xB8, 0x01, 0x00, 0x00, 0x00,
+                0x31, 0xC9,
+                0x0F, 0xA2,
+            ]
+        )
+
+        leaves: list[tuple[int, int]] = []
+
+        with self.make_engine() as engine:
+            engine.set_memory_mode(CPUEAXH_MEMORY_MODE_GUEST)
+            engine.load_code(code_address, code, CPUEAXH_PROT_READ | CPUEAXH_PROT_WRITE | CPUEAXH_PROT_EXEC)
+
+            def emulate_cpuid(context) -> None:
+                leaves.append(
+                    (
+                        int(context.regs[CPUEAXH_X86_REG_RAX] & 0xFFFFFFFF),
+                        int(context.regs[CPUEAXH_X86_REG_RCX] & 0xFFFFFFFF),
+                    )
+                )
+                context.regs[CPUEAXH_X86_REG_RAX] = 0x12345678
+                context.regs[CPUEAXH_X86_REG_RBX] = 0x87654321
+                context.regs[CPUEAXH_X86_REG_RCX] = 0xAABBCCDD
+                context.regs[CPUEAXH_X86_REG_RDX] = 0x0BADF00D
+
+            escape = engine.add_escape(
+                CPUEAXH_ESCAPE_INSN_CPUID,
+                emulate_cpuid,
+                code_address,
+                code_address + len(code) - 1,
+            )
+            try:
+                engine.start(code_address, count=3)
+            finally:
+                engine.delete_escape(escape)
+
+            self.assertEqual(leaves, [(1, 0)])
+            self.assertEqual(engine.read_register_u64(CPUEAXH_X86_REG_RAX), 0x12345678)
+            self.assertEqual(engine.read_register_u64(CPUEAXH_X86_REG_RBX), 0x87654321)
+            self.assertEqual(engine.read_register_u64(CPUEAXH_X86_REG_RCX), 0xAABBCCDD)
+            self.assertEqual(engine.read_register_u64(CPUEAXH_X86_REG_RDX), 0x0BADF00D)
+
     def test_start_function_returns_and_restores_original_stack_return(self) -> None:
         code_address = 0x4000
         stack_address = 0x8000
@@ -268,6 +318,21 @@ class CpueaxhSmokeTests(unittest.TestCase):
             with self.assertRaises(CpueaxhError) as patch_mode_error:
                 engine.add_memory_patch(0x1000, b"abcd")
             self.assertEqual(patch_mode_error.exception.code, CPUEAXH_ERR_MODE)
+
+    def test_duplicate_escape_registration_raises_hook_error(self) -> None:
+        code_address = 0x6000
+        code = bytes([0x0F, 0xA2])
+
+        with self.make_engine() as engine:
+            engine.set_memory_mode(CPUEAXH_MEMORY_MODE_GUEST)
+            engine.load_code(code_address, code, CPUEAXH_PROT_READ | CPUEAXH_PROT_WRITE | CPUEAXH_PROT_EXEC)
+            first = engine.add_escape(CPUEAXH_ESCAPE_INSN_CPUID, lambda context: None)
+            try:
+                with self.assertRaises(CpueaxhError) as duplicate_error:
+                    engine.add_escape(CPUEAXH_ESCAPE_INSN_CPUID, lambda context: None)
+                self.assertEqual(duplicate_error.exception.code, CPUEAXH_ERR_HOOK)
+            finally:
+                engine.delete_escape(first)
 
 
 if __name__ == "__main__":
