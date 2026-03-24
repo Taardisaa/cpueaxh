@@ -47,3 +47,7 @@ out/build/
 /.ninja_log
 /rules.ninja
 /CMakeUserPresets.json
+
+# Python
+__pycache__/
+*.pyc

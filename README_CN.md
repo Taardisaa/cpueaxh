@@ -446,8 +446,30 @@ cmake --build build --config Debug
 常用 CMake 选项：
 - `-DCPUEAXH_BUILD_EXAMPLE=OFF`
 - `-DCPUEAXH_BUILD_TESTS=OFF`
+- `-DCPUEAXH_BUILD_SHARED=ON`
 
 如果在其他 CMake 项目中集成，可以通过 `add_subdirectory()` 引入，并链接 `cpueaxh::cpueaxh`。
+
+### Python glue
+
+仓库现在也包含了一个最小可用的 `ctypes` 包装层：[python/cpueaxh.py](python/cpueaxh.py)。
+当前它面向用户态 API，适用于 `Windows + Python + cpueaxh_shared.dll` 的组合。
+
+先构建共享库：
+
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -T v145 -DCPUEAXH_BUILD_SHARED=ON
+cmake --build build --config Debug --target cpueaxh_shared
+```
+
+然后运行 Python guest-mode 演示：
+
+```powershell
+python python\guest_demo.py
+```
+
+这个演示会加载 `cpueaxh_shared.dll`，映射一个 guest 页，执行 `mov rax, 42; ret`，并打印最终的 `RAX` 值。
+如果 DLL 不在默认搜索到的几个构建输出目录里，也可以通过 `Engine(dll_path=...)` 显式传入路径。
 
 ## 开源协议
 

@@ -446,8 +446,30 @@ cmake --build build --config Debug
 Useful CMake options:
 - `-DCPUEAXH_BUILD_EXAMPLE=OFF`
 - `-DCPUEAXH_BUILD_TESTS=OFF`
+- `-DCPUEAXH_BUILD_SHARED=ON`
 
 From another CMake project, you can integrate the library with `add_subdirectory()` and link against `cpueaxh::cpueaxh`.
+
+### Python glue
+
+The repository now also includes a minimal `ctypes` wrapper at [python/cpueaxh.py](python/cpueaxh.py).
+It targets the user-mode API and is intended for `Windows + Python + cpueaxh_shared.dll`.
+
+Build the shared library:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -T v145 -DCPUEAXH_BUILD_SHARED=ON
+cmake --build build --config Debug --target cpueaxh_shared
+```
+
+Run the Python guest-mode demo:
+
+```powershell
+python python\guest_demo.py
+```
+
+The demo script loads `cpueaxh_shared.dll`, maps a guest page, executes `mov rax, 42; ret`, and prints the resulting `RAX` value.
+If the DLL is not in one of the default build output locations, pass its explicit path to `Engine(dll_path=...)`.
 
 ## License
 

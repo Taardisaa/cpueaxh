@@ -4,6 +4,7 @@ project(cpueaxh LANGUAGES CXX)
 
 option(CPUEAXH_BUILD_EXAMPLE "Build the user-mode example program" ON)
 option(CPUEAXH_BUILD_TESTS "Build the user-mode test executable" ON)
+option(CPUEAXH_BUILD_SHARED "Build a Windows DLL for FFI / Python glue" ON)
 
 if(NOT WIN32)
     message(FATAL_ERROR "The current CMake build supports Windows user-mode builds only.")
@@ -27,15 +28,27 @@ function(cpueaxh_apply_common_msvc_settings target_name)
     )
 endfunction()
 
-add_library(cpueaxh STATIC
+add_library(cpueaxh_obj OBJECT
     cpueaxh/cpueaxh.cpp
 )
 
-add_library(cpueaxh::cpueaxh ALIAS cpueaxh)
-
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    target_sources(cpueaxh PRIVATE cpueaxh/host_bridge.asm)
+    target_sources(cpueaxh_obj PRIVATE cpueaxh/host_bridge.asm)
 endif()
+
+target_include_directories(cpueaxh_obj
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpueaxh>
+        $<INSTALL_INTERFACE:include>
+)
+
+cpueaxh_apply_common_msvc_settings(cpueaxh_obj)
+
+add_library(cpueaxh STATIC
+    $<TARGET_OBJECTS:cpueaxh_obj>
+)
+
+add_library(cpueaxh::cpueaxh ALIAS cpueaxh)
 
 target_include_directories(cpueaxh
     PUBLIC
@@ -44,6 +57,27 @@ target_include_directories(cpueaxh
 )
 
 cpueaxh_apply_common_msvc_settings(cpueaxh)
+
+if(CPUEAXH_BUILD_SHARED)
+    add_library(cpueaxh_shared SHARED
+        $<TARGET_OBJECTS:cpueaxh_obj>
+    )
+
+    add_library(cpueaxh::cpueaxh_shared ALIAS cpueaxh_shared)
+
+    target_include_directories(cpueaxh_shared
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cpueaxh>
+            $<INSTALL_INTERFACE:include>
+    )
+
+    set_target_properties(cpueaxh_shared PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        OUTPUT_NAME cpueaxh_shared
+    )
+
+    cpueaxh_apply_common_msvc_settings(cpueaxh_shared)
+endif()
 
 if(CPUEAXH_BUILD_EXAMPLE)
     add_executable(cpueaxh_example
@@ -79,6 +113,15 @@ install(TARGETS cpueaxh
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+
+if(CPUEAXH_BUILD_SHARED)
+    install(TARGETS cpueaxh_shared
+        EXPORT cpueaxhTargets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(FILES cpueaxh/cpueaxh.hpp DESTINATION include)
 
