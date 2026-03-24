@@ -24,6 +24,8 @@ Smoke tests:
 python -m unittest discover -s python\tests -v
 ```
 
+The current smoke suite covers guest execution, code hooks, host-buffer mapping, memory patches, invalid-memory recovery, context round-tripping, `start_function()` behavior, and a couple of negative-path error cases.
+
 Useful high-level helpers on `cpueaxh.Engine`:
 - `load_code()`
 - `map_host_buffer()`

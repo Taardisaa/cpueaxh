@@ -85,13 +85,12 @@ This document tracks the current implementation status and the next recommended 
   - code hooks
   - host-buffer mapping
   - processor-id propagation
-- `[~]` Memory patch support exists in the Python API, but does not yet have a dedicated smoke test.
-- `[ ]` Add smoke tests for:
+- `[x]` Add smoke tests for:
   - memory patches
   - invalid memory hooks with retry / recovery
   - context round-trip of richer structures
   - `start_function()` semantics
-- `[ ]` Add negative-path tests for common error codes and argument validation.
+- `[x]` Add negative-path tests for common error codes and argument validation.
 
 ### 2.4 Python API Gaps
 
@@ -137,11 +136,11 @@ This document tracks the current implementation status and the next recommended 
 
 The most practical next steps are:
 
-1. `[ ]` Add Python smoke tests for memory patches and invalid-memory recovery hooks.
-2. `[ ]` Implement Python wrappers for escape registration APIs.
-3. `[ ]` Add CI for user-mode CMake + Python smoke tests.
-4. `[ ]` Write a dedicated kernel build/debug guide.
-5. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
+1. `[ ]` Implement Python wrappers for escape registration APIs.
+2. `[ ]` Add CI for user-mode CMake + Python smoke tests.
+3. `[ ]` Write a dedicated kernel build/debug guide.
+4. `[ ]` Add a lightweight release checklist once Python package publishing becomes a real distribution need.
+5. `[ ]` Expand Python examples into more realistic guest-mode workflows.
 
 ## 6. Notes
 
