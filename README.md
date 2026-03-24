@@ -479,7 +479,27 @@ The package entry points are centered around:
 - `cpueaxh.CpueaxhError`
 - `cpueaxh.CpueaxhX86Context`
 
-The demo loads `cpueaxh_shared.dll`, maps a guest page, executes one `mov rax, 42` instruction, and prints the resulting `RAX` value.
+Useful `Engine` helpers now include:
+- `load_code()`
+- `map_host_buffer()`
+- `add_code_hook()`
+- `add_memory_hook()`
+- `add_invalid_memory_hook()`
+- `add_memory_patch()`
+
+The guest demo loads `cpueaxh_shared.dll`, maps a guest page, executes one `mov rax, 42` instruction, and prints the resulting `RAX` value.
+There is also a hook demo:
+
+```powershell
+python -m cpueaxh.examples.hook_demo
+```
+
+Run the Python smoke tests:
+
+```powershell
+python -m unittest discover -s python\tests -v
+```
+
 If the DLL is not in one of the default build output locations, set `CPUEAXH_DLL_PATH` or pass an explicit path to `Engine(dll_path=...)`.
 
 ## License

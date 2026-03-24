@@ -479,7 +479,27 @@ python -m cpueaxh.examples.guest_demo
 - `cpueaxh.CpueaxhError`
 - `cpueaxh.CpueaxhX86Context`
 
-这个演示会加载 `cpueaxh_shared.dll`，映射一个 guest 页，只执行一条 `mov rax, 42` 指令，并打印最终的 `RAX` 值。
+`Engine` 里现在还额外提供了这些更实用的 helper：
+- `load_code()`
+- `map_host_buffer()`
+- `add_code_hook()`
+- `add_memory_hook()`
+- `add_invalid_memory_hook()`
+- `add_memory_patch()`
+
+这个 guest demo 会加载 `cpueaxh_shared.dll`，映射一个 guest 页，只执行一条 `mov rax, 42` 指令，并打印最终的 `RAX` 值。
+另外还提供了一个 hook demo：
+
+```powershell
+python -m cpueaxh.examples.hook_demo
+```
+
+运行 Python smoke tests：
+
+```powershell
+python -m unittest discover -s python\tests -v
+```
+
 如果 DLL 不在默认搜索到的几个构建输出目录里，也可以通过设置 `CPUEAXH_DLL_PATH`，或在 `Engine(dll_path=...)` 中显式传入路径。
 
 ## 开源协议

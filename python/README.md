@@ -10,3 +10,23 @@ cmake --build ..\build --config Debug --target cpueaxh_shared
 python -m pip install -e .
 python -m cpueaxh.examples.guest_demo
 ```
+
+Additional examples:
+
+```powershell
+python -m cpueaxh.examples.hook_demo
+```
+
+Smoke tests:
+
+```powershell
+python -m unittest discover -s python\tests -v
+```
+
+Useful high-level helpers on `cpueaxh.Engine`:
+- `load_code()`
+- `map_host_buffer()`
+- `add_code_hook()`
+- `add_memory_hook()`
+- `add_invalid_memory_hook()`
+- `add_memory_patch()`

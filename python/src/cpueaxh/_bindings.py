@@ -6,6 +6,10 @@ from pathlib import Path
 from ._loader import default_library_path
 from .types import CpueaxhMemRegion, CpueaxhX86Context
 
+CODE_HOOK_CALLBACK = ctypes.CFUNCTYPE(None, c_void_p, c_uint64, c_void_p)
+MEM_HOOK_CALLBACK = ctypes.CFUNCTYPE(None, c_void_p, c_uint32, c_uint64, c_size_t, c_uint64, c_void_p)
+INVALID_MEM_HOOK_CALLBACK = ctypes.CFUNCTYPE(c_int, c_void_p, c_uint32, c_uint64, c_size_t, c_uint64, c_void_p)
+
 
 class CpueaxhApi:
     def __init__(self, dll_path: str | os.PathLike[str] | None = None) -> None:
@@ -32,6 +36,10 @@ class CpueaxhApi:
         self.cpueaxh_mem_map = self.dll.cpueaxh_mem_map
         self.cpueaxh_mem_map.argtypes = [c_void_p, c_uint64, c_size_t, c_uint32]
         self.cpueaxh_mem_map.restype = c_int
+
+        self.cpueaxh_mem_map_ptr = self.dll.cpueaxh_mem_map_ptr
+        self.cpueaxh_mem_map_ptr.argtypes = [c_void_p, c_uint64, c_size_t, c_uint32, c_void_p]
+        self.cpueaxh_mem_map_ptr.restype = c_int
 
         self.cpueaxh_mem_unmap = self.dll.cpueaxh_mem_unmap
         self.cpueaxh_mem_unmap.argtypes = [c_void_p, c_uint64, c_size_t]
@@ -60,6 +68,10 @@ class CpueaxhApi:
         self.cpueaxh_reg_read = self.dll.cpueaxh_reg_read
         self.cpueaxh_reg_read.argtypes = [c_void_p, c_int, c_void_p]
         self.cpueaxh_reg_read.restype = c_int
+
+        self.cpueaxh_set_processor_id = self.dll.cpueaxh_set_processor_id
+        self.cpueaxh_set_processor_id.argtypes = [c_void_p, c_uint32]
+        self.cpueaxh_set_processor_id.restype = c_int
 
         self.cpueaxh_context_write = self.dll.cpueaxh_context_write
         self.cpueaxh_context_write.argtypes = [c_void_p, POINTER(CpueaxhX86Context)]
@@ -92,6 +104,26 @@ class CpueaxhApi:
         self.cpueaxh_mem_regions = self.dll.cpueaxh_mem_regions
         self.cpueaxh_mem_regions.argtypes = [c_void_p, POINTER(POINTER(CpueaxhMemRegion)), POINTER(c_uint32)]
         self.cpueaxh_mem_regions.restype = c_int
+
+        self.cpueaxh_mem_patch_add = self.dll.cpueaxh_mem_patch_add
+        self.cpueaxh_mem_patch_add.argtypes = [c_void_p, POINTER(c_uint64), c_uint64, c_void_p, c_size_t]
+        self.cpueaxh_mem_patch_add.restype = c_int
+
+        self.cpueaxh_mem_patch_del = self.dll.cpueaxh_mem_patch_del
+        self.cpueaxh_mem_patch_del.argtypes = [c_void_p, c_uint64]
+        self.cpueaxh_mem_patch_del.restype = c_int
+
+        self.cpueaxh_hook_add = self.dll.cpueaxh_hook_add
+        self.cpueaxh_hook_add.argtypes = [c_void_p, POINTER(c_uint64), c_uint32, c_void_p, c_void_p, c_uint64, c_uint64]
+        self.cpueaxh_hook_add.restype = c_int
+
+        self.cpueaxh_hook_add_address = self.dll.cpueaxh_hook_add_address
+        self.cpueaxh_hook_add_address.argtypes = [c_void_p, POINTER(c_uint64), c_uint32, c_void_p, c_void_p, c_uint64]
+        self.cpueaxh_hook_add_address.restype = c_int
+
+        self.cpueaxh_hook_del = self.dll.cpueaxh_hook_del
+        self.cpueaxh_hook_del.argtypes = [c_void_p, c_uint64]
+        self.cpueaxh_hook_del.restype = c_int
 
         self.cpueaxh_free = self.dll.cpueaxh_free
         self.cpueaxh_free.argtypes = [c_void_p]
