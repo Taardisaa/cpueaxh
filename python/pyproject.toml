@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cpueaxh"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python ctypes glue for the cpueaxh x86-64 emulator"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,3 +27,6 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "cpueaxh.__version__" }

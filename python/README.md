@@ -1,6 +1,7 @@
 # cpueaxh Python Glue
 
 This package provides a small `ctypes`-based wrapper around `cpueaxh_shared.dll`.
+The package version is exported as `cpueaxh.__version__` and used as the single source of truth for packaging metadata.
 
 Typical workflow:
 
