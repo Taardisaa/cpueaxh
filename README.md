@@ -33,6 +33,7 @@ The project is designed to provide:
 The public header is [cpueaxh/cpueaxh.hpp](cpueaxh/cpueaxh.hpp).
 
 All exported APIs use the `cpueaxh_*` naming convention and can be called directly from both C and C++.
+The implementation itself is written in `C++`, but the exposed surface is a stable `C ABI`, so other languages can also bind to it through FFI.
 
 ### 2. Static library form
 The core project [cpueaxh/cpueaxh.vcxproj](cpueaxh/cpueaxh.vcxproj) builds as a static library, making integration straightforward.
@@ -418,10 +419,35 @@ msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64Pl
 You can inspect the available x64 MSVC platform toolset names with:
 
 ```powershell
-Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets' -Directory
+Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets'
 ```
 
 The default project settings remain `v143` for `x64` user-mode builds and `WindowsKernelModeDriver10.0` for kernel-mode builds.
+
+### CMake
+
+The repository also includes a user-mode `CMakeLists.txt` for building the static library, the example program, and the test executable.
+The current CMake build targets `Windows + MSVC`; kernel-mode targets remain in the Visual Studio / WDK projects.
+
+Configure and build with a Visual Studio generator that matches your installed toolchain. For example:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Debug
+```
+
+If your installed Build Tools expose a different MSVC platform toolset such as `v145`, pass it as the generator toolset:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -T v145
+cmake --build build --config Debug
+```
+
+Useful CMake options:
+- `-DCPUEAXH_BUILD_EXAMPLE=OFF`
+- `-DCPUEAXH_BUILD_TESTS=OFF`
+
+From another CMake project, you can integrate the library with `add_subdirectory()` and link against `cpueaxh::cpueaxh`.
 
 ## License
 

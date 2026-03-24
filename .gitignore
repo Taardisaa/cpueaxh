@@ -29,3 +29,21 @@ Release/
 *.log
 *.tmp
 *.cache
+
+# CMake
+build/
+build-*/
+out/build/
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/install_manifest.txt
+/compile_commands.json
+/CTestTestfile.cmake
+/CPackConfig.cmake
+/CPackSourceConfig.cmake
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/rules.ninja
+/CMakeUserPresets.json

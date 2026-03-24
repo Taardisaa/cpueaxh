@@ -33,6 +33,7 @@
 公共头文件位于 [cpueaxh/cpueaxh.hpp](cpueaxh/cpueaxh.hpp)。
 
 所有导出 API 均使用 `cpueaxh_*` 命名，可直接从 C 和 C++ 调用。
+库的实现本身使用 `C++` 编写，但对外暴露的是稳定的 `C ABI`，因此也可以通过 FFI 被其他语言调用。
 
 ### 2. 静态库形式
 核心项目 [cpueaxh/cpueaxh.vcxproj](cpueaxh/cpueaxh.vcxproj) 以静态库形式构建，便于集成。
@@ -418,10 +419,35 @@ msbuild test\test.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:CpueaxhX64Pl
 可以用下面的命令查看本机实际可用的 x64 MSVC 工具集名字：
 
 ```powershell
-Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets' -Directory
+Get-ChildItem 'C:\Program Files (x86)\Microsoft Visual Studio\*\BuildTools\MSBuild\Microsoft\VC\*\Platforms\x64\PlatformToolsets'
 ```
 
 项目默认配置仍然保持为：`x64` 用户态使用 `v143`，内核态使用 `WindowsKernelModeDriver10.0`。
+
+### CMake
+
+仓库现在也包含一个面向用户态的 `CMakeLists.txt`，可用于构建静态库、示例程序和测试程序。
+当前 CMake 构建面向 `Windows + MSVC`；内核态目标仍然保留在现有的 Visual Studio / WDK 工程中。
+
+使用与你本机工具链匹配的 Visual Studio generator 配置并构建，例如：
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Debug
+```
+
+如果你本机安装的 Build Tools 暴露出来的 MSVC 平台工具集名字是 `v145` 这类值，也可以通过 generator toolset 传入：
+
+```powershell
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -T v145
+cmake --build build --config Debug
+```
+
+常用 CMake 选项：
+- `-DCPUEAXH_BUILD_EXAMPLE=OFF`
+- `-DCPUEAXH_BUILD_TESTS=OFF`
+
+如果在其他 CMake 项目中集成，可以通过 `add_subdirectory()` 引入，并链接 `cpueaxh::cpueaxh`。
 
 ## 开源协议
 
